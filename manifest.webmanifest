@@ -1,6 +1,6 @@
 {
-  "name": "Chấm công RakuCAD",
-  "short_name": "Chấm công",
+  "name": "RakuCAD — Chấm công",
+  "short_name": "RakuCAD",
   "description": "Hệ thống chấm công Công ty TNHH RakuCAD",
   "lang": "vi",
   "start_url": "./index.html",
