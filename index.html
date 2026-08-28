@@ -35,6 +35,17 @@
     width:34px; height:34px; border:3px solid rgba(255,255,255,.25);
     border-top-color:#e8a317; border-radius:50%; animation:quay .8s linear infinite;
   }
+  /* Logo lúc chờ: mở app ra là thấy ngay dấu hiệu công ty, không phải màn đen.
+     Thở nhẹ chứ không quay — quay cùng lúc với vòng xoay nhìn rối. */
+  .cho-logo {
+    width:74px; height:74px; object-fit:contain; display:block;
+    animation:tho 1.8s ease-in-out infinite;
+  }
+  @keyframes tho { 0%,100%{opacity:.6;transform:scale(.94)} 50%{opacity:1;transform:scale(1)} }
+  @media (prefers-reduced-motion:reduce) {
+    .cho-logo { animation:none; opacity:.9 }
+    .xoay { animation-duration:2s }
+  }
   @keyframes quay { to { transform:rotate(360deg); } }
   .ten { font-weight:700; letter-spacing:.14em; font-size:13px; color:#e8a317; }
   .phu { color:#9aa4b0; font-size:13px; max-width:280px; }
@@ -44,14 +55,71 @@
 <body>
 
 <div id="cho">
-  <div class="xoay"></div>
+  <img class="cho-logo" src="icon-192.png" alt="">
   <div class="ten">CÔNG TY TNHH RAKUCAD</div>
-  <div class="phu" id="choChu">Đang mở hệ thống chấm công…</div>
+  <div class="xoay"></div>
+  <div class="phu" id="choChu">Xin chờ một chút, đang mở hệ thống chấm công…</div>
 </div>
 
 <iframe id="khung" title="Chấm công RakuCAD"
         allow="geolocation"
         src="https://script.google.com/macros/s/AKfycbxPO0gGfb46JzdA2hM-wbmFQRuY29cAIde13BSAJ34TQ2eYN3r7-IQpw68oX6m8kHdTcg/exec"></iframe>
+
+<!-- Thông báo đẩy ra màn hình điện thoại.
+     Vì sao phải qua OneSignal: chuẩn Web Push bắt ký chữ ký VAPID bằng ES256,
+     mà Apps Script không ký được kiểu đó. Chi tiết xem ThongBaoDay.gs. -->
+<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+<script>
+window.OneSignalDeferred = window.OneSignalDeferred || [];
+var OS_SAN = false;
+window.OneSignalDeferred.push(function (OneSignal) {
+  OneSignal.init({
+    appId: 'ad27a01e-6017-434c-a33c-11558f47815b',
+    // Đặt riêng một thư mục con: sw.js của app đang giữ phạm vi /chamcong/,
+    // hai service worker cùng phạm vi thì cái sau đá cái trước ra.
+    serviceWorkerPath: 'chamcong/push/OneSignalSDKWorker.js',
+    serviceWorkerParam: { scope: '/chamcong/push/' }
+  }).then(function () {
+    OS_SAN = true;
+    if (window.__maChoDay) nhanDanh(window.__maChoDay);
+  });
+});
+
+/** Gắn tên đăng nhập vào máy này, để máy chủ đẩy đúng người chứ không đẩy tràn. */
+function nhanDanh(ma) {
+  window.__maChoDay = ma;
+  if (!OS_SAN) return;
+  window.OneSignalDeferred.push(function (OneSignal) {
+    OneSignal.login(String(ma)).then(function () {
+      // Chỉ hỏi quyền SAU khi đã đăng nhập. Hỏi ngay lúc mở app thì người ta
+      // chưa hiểu đây là app gì, bấm Từ chối là mất luôn, sau muốn bật lại
+      // phải vào cài đặt điện thoại — rất ít người làm nổi.
+      if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+        setTimeout(function () {
+          try { OneSignal.Slidedown.promptPush(); } catch (e) {}
+        }, 2500);
+      }
+    }).catch(function () {});
+  });
+}
+
+function boNhanDanh() {
+  window.__maChoDay = null;
+  if (!OS_SAN) return;
+  window.OneSignalDeferred.push(function (OneSignal) {
+    OneSignal.logout().catch(function () {});
+  });
+}
+
+// App nằm trong khung nhúng khác nguồn nên phải nói chuyện bằng postMessage.
+window.addEventListener('message', function (e) {
+  if (!/\.googleusercontent\.com$|^https:\/\/script\.google\.com$/.test(e.origin)) return;
+  var d = e.data;
+  if (!d || typeof d !== 'object') return;
+  if (d.rk === 'dangnhap' && d.ma) nhanDanh(d.ma);
+  else if (d.rk === 'dangxuat') boNhanDanh();
+});
+</script>
 
 <script>
 var khung = document.getElementById('khung');
