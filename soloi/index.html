@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Sổ lỗi công việc RakuCAD</title>
+
+<!-- Trang bọc riêng cho phần XỬ LÝ LỖI.
+     Cùng một web app Apps Script, chỉ khác đường dẫn: ?ung=loi. Máy chủ thấy
+     tham số đó thì chỉ dựng hai thẻ Lỗi công việc và Hồ sơ, không có chấm công.
+     Vì sao không tách hẳn ra một dự án Apps Script khác: đã đo, nhánh lỗi kéo
+     theo 142/371 hàm của dự án, tách ra là bê gần cả bộ mã rồi từ đó sửa gì
+     cũng phải sửa hai lần. Trên điện thoại thì đây vẫn là một app riêng hoàn
+     toàn: tên riêng, icon riêng, mở ra là vào thẳng sổ lỗi. -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#7f1d1d">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Sổ lỗi">
+<meta name="mobile-web-app-capable" content="yes">
+
+<style>
+  html, body { margin:0; padding:0; height:100%; background:#7f1d1d; overflow:hidden; }
+  #khung {
+    position:fixed; inset:0; border:0; width:100%; height:100%;
+    padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom);
+    box-sizing:border-box; background:#eceef1;
+  }
+  #cho {
+    position:fixed; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:18px;
+    background:#7f1d1d; color:#fff; font:15px/1.5 system-ui, -apple-system, sans-serif;
+    transition:opacity .35s; text-align:center; padding:24px;
+  }
+  #cho.an { opacity:0; pointer-events:none; }
+  .xoay {
+    width:34px; height:34px; border:3px solid rgba(255,255,255,.25);
+    border-top-color:#fbbf24; border-radius:50%; animation:quay .8s linear infinite;
+  }
+  .cho-logo {
+    width:74px; height:74px; object-fit:contain; display:block;
+    animation:tho 1.8s ease-in-out infinite;
+  }
+  @keyframes tho { 0%,100%{opacity:.6;transform:scale(.94)} 50%{opacity:1;transform:scale(1)} }
+  @media (prefers-reduced-motion:reduce) {
+    .cho-logo { animation:none; opacity:.9 }
+    .xoay { animation-duration:2s }
+  }
+  @keyframes quay { to { transform:rotate(360deg); } }
+  .ten { font-weight:700; letter-spacing:.14em; font-size:13px; color:#fbbf24; }
+  .phu { color:#e7c9c9; font-size:13px; max-width:280px; }
+  a { color:#fbbf24; }
+</style>
+</head>
+<body>
+
+<div id="cho">
+  <img class="cho-logo" src="icon-192.png" alt="">
+  <div class="ten">SỔ LỖI CÔNG VIỆC</div>
+  <div class="xoay"></div>
+  <div class="phu" id="choChu">Xin chờ một chút, đang mở sổ lỗi công việc…</div>
+</div>
+
+<iframe id="khung" title="Sổ lỗi công việc RakuCAD"
+        src="https://script.google.com/macros/s/AKfycbxPO0gGfb46JzdA2hM-wbmFQRuY29cAIde13BSAJ34TQ2eYN3r7-IQpw68oX6m8kHdTcg/exec?ung=loi"></iframe>
+
+<!-- Thông báo đẩy: dùng chung một ứng dụng OneSignal với app chấm công.
+     Đăng ký nhận đẩy là theo TÊN MIỀN chứ không theo thư mục, nên ai đã bật ở
+     app chấm công thì ở đây không phải bật lại. Nhưng service worker thì phải
+     đặt trong thư mục con riêng /chamcong/soloi/push/ — sw.js của trang này
+     đang giữ phạm vi /chamcong/soloi/, hai service worker cùng phạm vi thì cái sau đá cái trước. -->
+<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+<script>
+window.OneSignalDeferred = window.OneSignalDeferred || [];
+var OS_SAN = false;
+window.OneSignalDeferred.push(function (OneSignal) {
+  OneSignal.init({
+    appId: 'ad27a01e-6017-434c-a33c-11558f47815b',
+    serviceWorkerPath: 'chamcong/soloi/push/OneSignalSDKWorker.js',
+    serviceWorkerParam: { scope: '/chamcong/soloi/push/' }
+  }).then(function () {
+    OS_SAN = true;
+    if (window.__maChoDay) nhanDanh(window.__maChoDay);
+  });
+});
+
+/** Gắn tên đăng nhập vào máy này, để máy chủ đẩy đúng người chứ không đẩy tràn. */
+function nhanDanh(ma) {
+  window.__maChoDay = ma;
+  if (!OS_SAN) return;
+  window.OneSignalDeferred.push(function (OneSignal) {
+    OneSignal.login(String(ma)).then(function () {
+      // Chỉ hỏi quyền SAU khi đã đăng nhập — hỏi lúc vừa mở, người ta chưa hiểu
+      // đây là app gì, bấm Từ chối là mất luôn, bật lại phải vào cài đặt máy.
+      if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+        setTimeout(function () {
+          try { OneSignal.Slidedown.promptPush(); } catch (e) {}
+        }, 2500);
+      }
+    }).catch(function () {});
+  });
+}
+
+function boNhanDanh() {
+  window.__maChoDay = null;
+  if (!OS_SAN) return;
+  window.OneSignalDeferred.push(function (OneSignal) {
+    OneSignal.logout().catch(function () {});
+  });
+}
+
+// App nằm trong khung nhúng khác nguồn nên phải nói chuyện bằng postMessage.
+window.addEventListener('message', function (e) {
+  if (!/\.googleusercontent\.com$|^https:\/\/script\.google\.com$/.test(e.origin)) return;
+  var d = e.data;
+  if (!d || typeof d !== 'object') return;
+  if (d.rk === 'dangnhap' && d.ma) nhanDanh(d.ma);
+  else if (d.rk === 'dangxuat') boNhanDanh();
+});
+</script>
+
+<script>
+var khung = document.getElementById('khung');
+var cho = document.getElementById('cho');
+
+khung.addEventListener('load', function () { cho.classList.add('an'); });
+
+setTimeout(function () {
+  if (!cho.classList.contains('an')) {
+    document.getElementById('choChu').innerHTML =
+      'Mạng chậm hoặc không vào được.<br>' +
+      '<a href="' + khung.src + '" target="_blank" rel="noopener">Bấm vào đây để mở trực tiếp</a>';
+  }
+}, 12000);
+
+// Service worker chỉ để trình duyệt công nhận đây là app cài được.
+// CỐ Ý không lưu đệm: phiếu lỗi phải luôn là bản mới nhất.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+  });
+}
+</script>
+</body>
+</html>
